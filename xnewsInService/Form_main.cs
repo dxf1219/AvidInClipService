@@ -14,6 +14,7 @@ using System.Xml;
 using Oracle.DataAccess.Client;
 using System.Collections;
 using System.Web;
+using StackExchange.Redis;
 
 namespace xnewsInService
 {
@@ -33,13 +34,26 @@ namespace xnewsInService
             {
                 Directory.CreateDirectory(dbdir);
             }
-              
+
+            try
+            {
+                redis = ConnectionMultiplexer.Connect(Properties.Settings.Default.redisconstring);
+                CommonTools.writeLog("redis连接成功!" + Properties.Settings.Default.redisconstring, logpath, "info");
+            }
+            catch (Exception ee)
+            {
+                CommonTools.writeLog("redis连接失败!" + Properties.Settings.Default.redisconstring + ee.ToString(), logpath, "error");
+                MessageBox.Show("redis连接失败!" + Properties.Settings.Default.redisconstring + ee.ToString());
+                //return;
+            }
+
 
             timer1.Enabled = false;
             timer1.Interval = 3000;
             toolStripStatusLabel3.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             CommonTools.writeLog("软件启动!",logpath,"info");
             this.Text = Properties.Settings.Default.AppTitle;
+
             SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "软件启动!\n");
             readPathInfo();
             timer1.Enabled = true;
@@ -110,7 +124,10 @@ namespace xnewsInService
 
         private Hashtable htpaths = null;
 
-        private string pathid;
+        private string pathid="ddtest001default";
+
+        private ConnectionMultiplexer redis;
+
         public bool IsFileInUse(string fileName)
         {
             bool inUse = true;
@@ -136,99 +153,117 @@ namespace xnewsInService
         {
             while (true)
             {
-                string[] mediafiles = Directory.GetFiles(Properties.Settings.Default.scanstpFilePath);  //扫描arcstp打包完成后的素材目录
-                //判断文件素材是否已经做过
-                foreach(string mediafile in mediafiles)
+                try
                 {
-                    FileInfo fimedia = new FileInfo(mediafile);
-                    string extens= fimedia.Extension ;
-                    if (!extens.ToLower().Equals(Properties.Settings.Default.fileExtension))  //非mxf文件
+                    IDatabase db = redis.GetDatabase();
+                    string key = this.Text + "live";
+                    string value = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                    db.StringSet(key, value);
+                }
+                catch (Exception ee)
+                {
+                    CommonTools.writeLog("redis 写入key value 异常!" + ee.ToString(), logpath, "error");
+                }
+
+                string[] mediaMd5files = Directory.GetFiles(Properties.Settings.Default.scanstpFilePath, "*.md5sum",SearchOption.TopDirectoryOnly);  //扫描arcstp打包完成后的素材目录
+                //判断文件素材是否已经做过
+                foreach(string mediaMd5file in mediaMd5files)
+                {
+                    string mediafile = Properties.Settings.Default.scanstpFilePath + "\\" + Path.GetFileNameWithoutExtension(mediaMd5file);
+                    if (!File.Exists(mediafile))
                     {
-                        continue;
+                        mediafile = mediafile + ".mxf";
                     }
-                    if (IsFileInUse(mediafile))
+                    try
                     {
-                        continue; 
-                        //该文件正在被使用
-                    }
-                    else //不再被使用
-                    {
-                        CommonTools.writeLog("开始avidin流程:"+mediafile,logpath,"info");
-                        SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "开始avidin流程:" + Path.GetFileName(mediafile) + "\n");
-
-                        //生成count文件
-                        if (!Directory.Exists(Application.StartupPath + "\\counts"))
+                        FileInfo fimedia = new FileInfo(mediafile);
+                        string extens = fimedia.Extension;
+                        if (!extens.ToLower().Equals(Properties.Settings.Default.fileExtension))  //非mxf文件
                         {
-                            Directory.CreateDirectory(Application.StartupPath + "\\counts");
-                        }
-                        string newcountfile = Application.StartupPath + "\\counts\\" + Path.GetFileNameWithoutExtension(mediafile)+"count.xml";
-                        try
-                        {
-                            if (!File.Exists(newcountfile))
-                            {
-                                File.Copy(Application.StartupPath + "\\counts.xml",newcountfile,true);
-                            }
-
-                            XmlDocument doc = new XmlDocument();
-                            doc.Load(newcountfile);
-                            System.Xml.XmlElement root = doc.DocumentElement;
-
-                            XmlNode countnode = root.SelectSingleNode("/root/counts");
-                            string nowcount = countnode.InnerText;
-                            int newcount = Convert.ToInt32(nowcount) +1;
-                            countnode.InnerText = newcount.ToString();
-                            doc.Save(newcountfile);
-                            if (newcount > Properties.Settings.Default.errorRetryCounts)
-                            {
-                                //对文件进行重命名
-                                string newerrorfile = Properties.Settings.Default.scanstpFilePath + "\\" + Path.GetFileName(mediafile)+".error";
-                                if (!File.Exists(newerrorfile))
-                                {
-                                    try
-                                    {
-                                        File.Move(mediafile, newerrorfile);
-                                        CommonTools.writeLog("对素材进行出错处理:" + newerrorfile, logpath, "info");
-                                        SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "对素材进行出错处理:" + Path.GetFileName(mediafile) + "\n");
-                                    }
-                                    catch (Exception ee)
-                                    {
-                                        CommonTools.writeLog("对素材进行出错处理失败:" + newerrorfile + ee.ToString(), logpath, "error");
-                                    }
-                                }
-                                continue;
-                               
-                            } //超过重试次数
-                        }
-                        catch (Exception ee)
-                        {
-                            CommonTools.writeLog("生成文件统计失败!"+ee.ToString(),logpath,"error");
-                            SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "生成文件统计失败!"  + "\n");
-                                   
+                            CommonTools.writeLog("非avid mxf文件 不处理!" + mediafile, logpath, "info");
+                            SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "非avid mxf文件 不处理:" + Path.GetFileName(mediafile) + "\n");
                             continue;
                         }
-                        string mp4filename = replaceSpecialSQLSyntax(mediafile);
-                        mp4filename = mp4filename.Replace(" ","");
-                        if (mediafile.Equals(mp4filename))
+                        if (IsFileInUse(mediafile))
                         {
-                            //
+                            continue;
+                            //该文件正在被使用
                         }
-                        else  //mpg文件 需要改名
+                        else //不再被使用
                         {
+                            CommonTools.writeLog("开始MediaManager--avidin流程:" + mediafile, logpath, "info");
+                            SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "开始开始MediaManager---avidin流程:" + Path.GetFileName(mediafile) + "\n");
+
+                            //生成count文件
+                            if (!Directory.Exists(Application.StartupPath + "\\counts"))
+                            {
+                                Directory.CreateDirectory(Application.StartupPath + "\\counts");
+                            }
+                            string newcountfile = Application.StartupPath + "\\counts\\" + Path.GetFileNameWithoutExtension(mediafile) + "count.xml";
                             try
                             {
-                                File.Move(mediafile, mp4filename);
-                                CommonTools.writeLog("素材修改名称成功!" + mp4filename, logpath, "info");
-                                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "素材修改名称成功:" + Path.GetFileName(mp4filename) + "\n");
+                                if (!File.Exists(newcountfile))
+                                {
+                                    File.Copy(Application.StartupPath + "\\counts.xml", newcountfile, true);
+                                }
+
+                                XmlDocument doc = new XmlDocument();
+                                doc.Load(newcountfile);
+                                System.Xml.XmlElement root = doc.DocumentElement;
+
+                                XmlNode countnode = root.SelectSingleNode("/root/counts");
+                                string nowcount = countnode.InnerText;
+                                int newcount = Convert.ToInt32(nowcount) + 1;
+                                countnode.InnerText = newcount.ToString();
+                                doc.Save(newcountfile);
+                                if (newcount > Properties.Settings.Default.errorRetryCounts)
+                                {
+                                    //对文件进行重命名
+                                    string newerrorfile = Properties.Settings.Default.scanstpFilePath + "\\" + Path.GetFileName(mediafile) + ".error";
+                                    if (!File.Exists(newerrorfile))
+                                    {
+                                        try
+                                        {
+                                            File.Move(mediafile, newerrorfile);
+                                            CommonTools.writeLog("对素材进行出错处理:" + newerrorfile, logpath, "info");
+                                            SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "对素材进行出错处理:" + Path.GetFileName(mediafile) + "\n");
+                                        }
+                                        catch (Exception ee)
+                                        {
+                                            CommonTools.writeLog("对素材进行出错处理失败:" + newerrorfile + ee.ToString(), logpath, "error");
+                                        }
+                                    }
+                                    continue;
+                                } //超过重试次数
                             }
                             catch (Exception ee)
                             {
-                                CommonTools.writeLog("素材修改名称失败!" + Path.GetFileName(mp4filename) + ee.ToString(), logpath, "info");
+                                CommonTools.writeLog("生成文件统计失败!" + ee.ToString(), logpath, "error");
+                                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "生成文件统计失败!" + "\n");
                                 continue;
                             }
-                        }
-                        //调用mediainfo 获取信息
-                     
-            
+
+                            string mxffilename = replaceSpecialSQLSyntax(mediafile);
+                            mxffilename = mxffilename.Replace(" ", "");
+                            if (mediafile.Equals(mxffilename))
+                            {
+                                //
+                            }
+                            else  //mpg文件 需要改名
+                            {
+                                try
+                                {
+                                    File.Move(mediafile, mxffilename);
+                                    CommonTools.writeLog("素材修改名称成功!" + mxffilename, logpath, "info");
+                                    SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "素材修改名称成功:" + Path.GetFileName(mxffilename) + "\n");
+                                }
+                                catch (Exception ee)
+                                {
+                                    CommonTools.writeLog("素材修改名称失败!" + Path.GetFileName(mxffilename) + ee.ToString(), logpath, "info");
+                                    continue;
+                                }
+                            }
+                          
                             //从节目名称中获取节目ID 从oracle中获取节目ID 
                             string hrfile01 = Path.GetFileNameWithoutExtension(mediafile);
 
@@ -243,52 +278,71 @@ namespace xnewsInService
                             }
                             catch (Exception ee)
                             {
-                                CommonTools.writeLog("获取节目ID异常：" + hrfile01+" "+ee.ToString(), logpath, "error");
+                                CommonTools.writeLog("获取节目ID异常：" + hrfile01 + " " + ee.ToString(), logpath, "error");
                                 SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "获取节目ID异常：" + hrfile01 + "\n");
                             }
-                            
+
                             string programID = getprogramid;
-                            CommonTools.writeLog("获取节目ID：" + programID, logpath, "error");
-                            if (programID.Length ==0)
+                            CommonTools.writeLog("获取节目ID：" + programID, logpath, "info");
+
+                            XnewsInfo xinfo = new XnewsInfo();
+                            xinfo.ChannelPath = Properties.Settings.Default.site;
+                            xinfo.ProgramID = programID;
+                            xinfo.MediafilePath = mxffilename;
+                            xinfo.Mediafilename = Path.GetFileName(mxffilename);
+                            xinfo.Creator = "mmadmin";
+
+                            if (programID.Length == 0)
                             {
-                                CommonTools.writeLog("获取节目ID为空，为非系统生成的文件!" + hrfile01, logpath, "error");
+                                CommonTools.writeLog("获取节目ID为空，为非MediaMangerSTP生成的文件!" + hrfile01, logpath, "error");
+                                xinfo.ProgramID = DateTime.Now.ToString("yyyyMMddHHmmssfff");
+                                //直接复制mxf到内网 并生成videoxml
+                                //复制视频文件
+                                string destvideo = Properties.Settings.Default.destVideoPath + "\\" + Path.GetFileName(xinfo.MediafilePath);
+                                try
+                                {
+                                    CommonTools.writeLog("开始复制视频文件:" + destvideo, logpath, "info");
+                                    SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "开始复制视频文件:" + Path.GetFileName(destvideo) + "\n");
+                                    File.Copy(xinfo.MediafilePath, destvideo, true);
+                                    CommonTools.writeLog("复制视频文件成功:" + destvideo, logpath, "info");
+                                    SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制视频文件成功:" + Path.GetFileName(destvideo) + "\n");
+                                    //复制视频文件xml 
+                                    //生成导入的xml文件
+                                    createVideoInfo(xinfo);
+                          
+                                }
+                                catch (Exception ee)
+                                {
+                                    CommonTools.writeLog("处理非MediaMangerSTP生成的文件流程异常!" + destvideo + ee.ToString(), logpath, "error");
+                                }
                                 continue;
                             }
 
-                        string scripPath = Properties.Settings.Default.scanScripPath + "\\" + programID;
+                            string scripPath = Properties.Settings.Default.scanScripPath + "\\" + programID;
 
-                        XnewsInfo xinfo = new XnewsInfo();
-
-                        xinfo.ChannelPath = Properties.Settings.Default.site;
-                        xinfo.ProgramID = programID;
-                        xinfo.MediafilePath = mp4filename;
-                        xinfo.Mediafilename = Path.GetFileName(mp4filename);
-                        xinfo.Creator = "mmadmin";
-                        //查询oracle数据库 根据节目ID查询目录
-                        #region oracle 数据库查询
-                        OracleConnection conn = new OracleConnection (Properties.Settings.Default.oracleConn);
+                            //查询oracle数据库 根据节目ID查询目录
+                            #region oracle 数据库查询
+                            OracleConnection conn = new OracleConnection(Properties.Settings.Default.oracleConn);
                             try
                             {
                                 conn.Open();
                                 string sql = "SELECT MEDIADIRID ,MEDIACREATER  FROM TPROGRAMMEDIA WHERE (MEDIAID ='" + programID + "')";
-                                OracleCommand cmd = new OracleCommand(sql,conn);
-                                OracleDataReader dr =  cmd.ExecuteReader();
-                                   
+                                OracleCommand cmd = new OracleCommand(sql, conn);
+                                OracleDataReader dr = cmd.ExecuteReader();
+
                                 if (dr.HasRows)
                                 {
                                     dr.Read();
                                     pathid = dr[0].ToString();
                                     xinfo.Creator = dr[1].ToString();
-                            }
+                                }
                                 dr.Close();
                             }
                             catch (Exception ee)
                             {
-                                CommonTools.writeLog("数据库异常:"+ee.ToString(),logpath,"error");
+                                CommonTools.writeLog("数据库异常:" + ee.ToString(), logpath, "error");
                             }
                             #endregion
-
-
 
                             if (!Directory.Exists(scripPath))
                             {
@@ -299,12 +353,14 @@ namespace xnewsInService
                                 string localdescpath = Application.StartupPath + "\\DBTemp\\" + programID + "_DescData.xml";
                                 File.Copy(scripPath + "\\DescData.xml", localdescpath, true);
                                 CommonTools.writeLog("复制描述信息xml到本地:" + localdescpath, logpath, "info");
-                                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制描述信息xml到本地:" +Path.GetFileName(localdescpath) + "\n");
+                                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制描述信息xml到本地:" + Path.GetFileName(localdescpath) + "\n");
                                 XmlDocument xDoc = new XmlDocument();
                                 xDoc.Load(localdescpath);
-                                  
+
                                 XmlNodeList lxDescItemNodeList = xDoc.SelectNodes("//DescItem");
-                                 foreach (XmlNode lxDescItemNode in lxDescItemNodeList)
+
+                                #region 读取文稿xml信息
+                                foreach (XmlNode lxDescItemNode in lxDescItemNodeList)
                                 {
                                     if (lxDescItemNode.Attributes["EName"].Value.Equals("title"))
                                     {
@@ -334,103 +390,111 @@ namespace xnewsInService
                                     {
                                         xinfo.Sites = lxDescItemNode.FirstChild.NextSibling.InnerText;
                                     }
-                                }                               
-                            }
+                                }//foreach
+                                #endregion
+
+                            } //文稿目录存在 
+
                             int result = 0;
                             //生成导入内网的xml 
                             result = createAvidInfo(xinfo);
-                           if (result == 0)
-                           {
-                               //移动完成目录
-                               //更新数据库 移动到其它目录中去  AVID发布完成  20160725102749410810
-                               string destpath = Properties.Settings.Default.destMediaManagerPathID;
-                               string MEDIADIRIDNew = "";
-                               try
-                               {
-                                   MEDIADIRIDNew = destpath;
-                               }
-                               catch (Exception ee)
-                               {
-                                   CommonTools.writeLog("获取发布完成目录异常!" + ee.ToString(), logpath, "error");
-                               }
+                            if (result == 0)
+                            {
+                                //移动完成目录
+                                //更新数据库 移动到其它目录中去  AVID发布完成  20160725102749410810
+                                string destpath = Properties.Settings.Default.destMediaManagerPathID;
+                                string MEDIADIRIDNew = "";
+                                try
+                                {
+                                    MEDIADIRIDNew = destpath;
+                                }
+                                catch (Exception ee)
+                                {
+                                    CommonTools.writeLog("获取发布完成目录异常!" + ee.ToString(), logpath, "error");
+                                }
 
-                               if (conn.State == ConnectionState.Closed)
-                               {
-                                   try
-                                   {
-                                       conn.Open();
-                                       CommonTools.writeLog("数据库处于关闭状态!重新打开!", logpath, "info");
-                                   }
-                                   catch (Exception ee)
-                                   {
-                                       CommonTools.writeLog("数据库处于关闭状态!重新打开异常:" + ee.ToString(), logpath, "error");
-                                   }
-                               }
-                               string updatesql = "";
-                               if (!string.IsNullOrEmpty(MEDIADIRIDNew))
-                               {
-                                   updatesql = " update TPROGRAMMEDIA set  MEDIADIRID='" + MEDIADIRIDNew + "' where MEDIAID = '" + programID + "' ";
-                                   OracleCommand cmdupdate = new OracleCommand(updatesql, conn);
-                                   try
-                                   {
-                                       int resultupdate = cmdupdate.ExecuteNonQuery();
-                                       if (resultupdate > 0)
-                                       {
-                                           CommonTools.writeLog("移动到发布目录成功!", logpath, "info");
-                                       }
-                                       else
-                                       {
-                                           string delsql = " delete TPROGRAMMEDIA  where MEDIAID = '" + programID + "' ";
-                                           OracleCommand cmddel = new OracleCommand(delsql, conn);
-                                           try
-                                           {
-                                               int resultdel = cmddel.ExecuteNonQuery();
-                                               CommonTools.writeLog("删除原目录下的打包记录成功!" + resultdel.ToString(), logpath, "info");
-                                           }
-                                           catch (Exception ee)
-                                           {
-                                               CommonTools.writeLog("删除原目录下的打包记录异常:" + delsql + ee.ToString(), logpath, "error");
-                                           }
+                                if (conn.State == ConnectionState.Closed)
+                                {
+                                    try
+                                    {
+                                        conn.Open();
+                                        CommonTools.writeLog("数据库处于关闭状态!重新打开!", logpath, "info");
+                                    }
+                                    catch (Exception ee)
+                                    {
+                                        CommonTools.writeLog("数据库处于关闭状态!重新打开异常:" + ee.ToString(), logpath, "error");
+                                    }
+                                }
+                                string updatesql = "";
+                                if (!string.IsNullOrEmpty(MEDIADIRIDNew))
+                                {
+                                    updatesql = " update TPROGRAMMEDIA set  MEDIADIRID='" + MEDIADIRIDNew + "' where MEDIAID = '" + programID + "' ";
+                                    OracleCommand cmdupdate = new OracleCommand(updatesql, conn);
+                                    try
+                                    {
+                                        int resultupdate = cmdupdate.ExecuteNonQuery();
+                                        if (resultupdate > 0)
+                                        {
+                                            CommonTools.writeLog("移动到发布目录成功!", logpath, "info");
+                                        }
+                                        else
+                                        {
+                                            string delsql = " delete TPROGRAMMEDIA  where MEDIAID = '" + programID + "' ";
+                                            OracleCommand cmddel = new OracleCommand(delsql, conn);
+                                            try
+                                            {
+                                                int resultdel = cmddel.ExecuteNonQuery();
+                                                CommonTools.writeLog("删除原目录下的打包记录成功!" + resultdel.ToString(), logpath, "info");
+                                            }
+                                            catch (Exception ee)
+                                            {
+                                                CommonTools.writeLog("删除原目录下的打包记录异常:" + delsql + ee.ToString(), logpath, "error");
+                                            }
 
-                                       }  //else 更新失败
-                                   }
-                                   catch (Exception ee)
-                                   {
-                                       CommonTools.writeLog("update异常:" + updatesql + ee.ToString(), logpath, "error");
-                                   }
-                               }
-                               else
-                               {
-                                   string delsql = " delete TPROGRAMMEDIA  where MEDIAID = '" + programID + "' ";
-                                   OracleCommand cmddel = new OracleCommand(delsql, conn);
-                                   try
-                                   {
-                                       int resultdel = cmddel.ExecuteNonQuery();
-                                       CommonTools.writeLog("删除原目录下的打包记录成功!" + resultdel.ToString(), logpath, "info");
-                                   }
-                                   catch (Exception ee)
-                                   {
-                                       CommonTools.writeLog("删除原目录下的打包记录异常!" + delsql + ee.ToString(), logpath, "error");
-                                   }
-                               }
-                               try
-                               {
-                                   conn.Close();
-                               }
-                               catch (Exception ee)
-                               {
-                                   CommonTools.writeLog("数据库关闭异常:" + ee.ToString(), logpath, "error");
-                               }
+                                        }  //else 更新失败
+                                    }
+                                    catch (Exception ee)
+                                    {
+                                        CommonTools.writeLog("update异常:" + updatesql + ee.ToString(), logpath, "error");
+                                    }
+                                }
+                                else
+                                {
+                                    string delsql = " delete TPROGRAMMEDIA  where MEDIAID = '" + programID + "' ";
+                                    OracleCommand cmddel = new OracleCommand(delsql, conn);
+                                    try
+                                    {
+                                        int resultdel = cmddel.ExecuteNonQuery();
+                                        CommonTools.writeLog("删除原目录下的打包记录成功!" + resultdel.ToString(), logpath, "info");
+                                    }
+                                    catch (Exception ee)
+                                    {
+                                        CommonTools.writeLog("删除原目录下的打包记录异常!" + delsql + ee.ToString(), logpath, "error");
+                                    }
+                                }
+                                try
+                                {
+                                    conn.Close();
+                                }
+                                catch (Exception ee)
+                                {
+                                    CommonTools.writeLog("数据库关闭异常:" + ee.ToString(), logpath, "error");
+                                }
 
 
-                                File.Delete(mp4filename);
-                                CommonTools.writeLog("删除文件:" + mp4filename, logpath, "info");
+                                File.Delete(mxffilename);
+                                CommonTools.writeLog("删除文件:" + mxffilename, logpath, "info");
                                 SetText("\n");
-
                             }
                             Thread.Sleep(10);
-                        
+                        } //else //不再被使用
+                    } 
+                    catch (Exception ee)
+                    {
+                        CommonTools.writeLog("redis 写入key value 异常!" + ee.ToString(), logpath, "error");
                     }
+
+
                 }//foreach(string mediafile in mediafiles)
                 System.Threading.Thread.Sleep(Properties.Settings.Default.ScanXmlInterval);
             }
@@ -523,9 +587,6 @@ namespace xnewsInService
                 CommonTools.writeLog("生成video info 异常:" + ee.ToString(), logpath, "error");
                 return -1;
             }
-
-
-
         }
         private int createAvidInfo( XnewsInfo xinfo)
         {
@@ -698,12 +759,13 @@ namespace xnewsInService
                 xmlDoc.Save(xmlfile);
                 CommonTools.writeLog("生成xmlfile 文件:" + xmlfile, logpath, "info");
                 SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "生成xmlfile 文件:" +Path.GetFileName(xmlfile) + "\n");
+
                 string destscriptxml = Properties.Settings.Default.destScriptPath +"\\"+ xinfo.ProgramID + ".xml";
                 File.Copy(xmlfile, destscriptxml,true);
                 CommonTools.writeLog("复制文稿xml 文件成功:" + destscriptxml, logpath, "info");
                 SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制文稿xml 文件成功:"  + Path.GetFileName(destscriptxml) + "\n");
-                //复制视频文件
                 
+                //复制视频文件
                 string destvideo = Properties.Settings.Default.destVideoPath + "\\" + Path.GetFileName(xinfo.MediafilePath);
                 CommonTools.writeLog("开始复制视频文件:" + destvideo, logpath, "info");
                 SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "开始复制视频文件:" + Path.GetFileName(destvideo) + "\n");
@@ -721,7 +783,6 @@ namespace xnewsInService
                 {
                     return -1;
                 }
-            
             }
             catch (Exception ee)
             {

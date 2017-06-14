@@ -188,5 +188,17 @@ namespace xnewsInService.Properties {
                 this["destVideoPath"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("10.27.137.24:16379,password=P@ssw0rdredis")]
+        public string redisconstring {
+            get {
+                return ((string)(this["redisconstring"]));
+            }
+            set {
+                this["redisconstring"] = value;
+            }
+        }
     }
 }
