@@ -1,0 +1,52 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="xnewsInService.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="AppTitle" Type="System.String" Scope="User">
+      <Value Profile="(Default)">MeidaManagerAvidInClipService</Value>
+    </Setting>
+    <Setting Name="ScanXmlInterval" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">10000</Value>
+    </Setting>
+    <Setting Name="scanstpFilePath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">\\10.27.137.111\smg\test\DBoxRoot\ArcStpAVIDCLIP</Value>
+    </Setting>
+    <Setting Name="platform" Type="System.String" Scope="User">
+      <Value Profile="(Default)">外来电讯</Value>
+    </Setting>
+    <Setting Name="site" Type="System.String" Scope="User">
+      <Value Profile="(Default)">快编制作</Value>
+    </Setting>
+    <Setting Name="errorRetryCounts" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">3</Value>
+    </Setting>
+    <Setting Name="scanHrDoneFiePath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">\\10.27.137.111\smg\test\DBoxRoot\STPDonePmStore</Value>
+    </Setting>
+    <Setting Name="oracleConn" Type="(Connection string)" Scope="Application">
+      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;SerializableConnectionString xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"&gt;
+  &lt;ConnectionString&gt;Data Source=cmdbs;Persist Security Info=True;User ID=mfadmin;Password=mfadmin&lt;/ConnectionString&gt;
+&lt;/SerializableConnectionString&gt;</DesignTimeValue>
+      <Value Profile="(Default)">Data Source=cmdbs;Persist Security Info=True;User ID=mfadmin;Password=mfadmin</Value>
+    </Setting>
+    <Setting Name="scanScripPath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">\\10.27.137.111\smg\test\DBoxRoot\FrameStore</Value>
+    </Setting>
+    <Setting Name="destMediaManagerPathID" Type="System.String" Scope="User">
+      <Value Profile="(Default)">20170509135644967487</Value>
+    </Setting>
+    <Setting Name="channelPath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">快编制作</Value>
+    </Setting>
+    <Setting Name="fileExtension" Type="System.String" Scope="User">
+      <Value Profile="(Default)">.mxf</Value>
+    </Setting>
+    <Setting Name="destScriptPath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">\\10.26.124.101\admin\xw\XnewsSearchToAvid\script</Value>
+    </Setting>
+    <Setting Name="destVideoPath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">\\10.26.124.101\admin\xw\XnewsSearchToAvid\video</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>
