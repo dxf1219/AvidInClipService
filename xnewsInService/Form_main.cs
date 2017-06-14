@@ -291,21 +291,22 @@ namespace xnewsInService
                             xinfo.MediafilePath = mxffilename;
                             xinfo.Mediafilename = Path.GetFileName(mxffilename);
                             xinfo.Creator = "mmadmin";
-
+                           
                             if (programID.Length == 0)
                             {
                                 CommonTools.writeLog("获取节目ID为空，为非MediaMangerSTP生成的文件!" + hrfile01, logpath, "error");
                                 xinfo.ProgramID = DateTime.Now.ToString("yyyyMMddHHmmssfff");
+                                xinfo.Title = Path.GetFileNameWithoutExtension(mediafile); 
                                 //直接复制mxf到内网 并生成videoxml
                                 //复制视频文件
                                 string destvideo = Properties.Settings.Default.destVideoPath + "\\" + Path.GetFileName(xinfo.MediafilePath);
                                 try
                                 {
                                     CommonTools.writeLog("开始复制视频文件:" + destvideo, logpath, "info");
-                                    SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "开始复制视频文件:" + Path.GetFileName(destvideo) + "\n");
+                                    SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "开始复制视频文件:" + destvideo + "\n");
                                     File.Copy(xinfo.MediafilePath, destvideo, true);
                                     CommonTools.writeLog("复制视频文件成功:" + destvideo, logpath, "info");
-                                    SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制视频文件成功:" + Path.GetFileName(destvideo) + "\n");
+                                    SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制视频文件成功:" + destvideo + "\n");
                                     //复制视频文件xml 
                                     //生成导入的xml文件
                                     createVideoInfo(xinfo);
@@ -484,6 +485,9 @@ namespace xnewsInService
 
                                 File.Delete(mxffilename);
                                 CommonTools.writeLog("删除文件:" + mxffilename, logpath, "info");
+
+                                File.Delete(mediaMd5file);
+                                CommonTools.writeLog("删除md5文件:" + mediaMd5file, logpath, "info");
                                 SetText("\n");
                             }
                             Thread.Sleep(10);
@@ -518,57 +522,30 @@ namespace xnewsInService
                 //创建根节点
                 XmlNode rootNode = xmlDoc.CreateElement("root");
 
-                XmlNode sourceSystemNode = xmlDoc.CreateElement("sourceSystem");
-                sourceSystemNode.InnerText = "MediaManager";
-                rootNode.AppendChild(sourceSystemNode);
-
-                XmlNode XInterplayPathNode = xmlDoc.CreateElement("XInterplayPath");
-
-                string xinterplayPath = pathid + ";" + Properties.Settings.Default.destMediaManagerPathID;  //打包的目录 和打包完成的目录
-
-                XInterplayPathNode.InnerText = xinterplayPath;
-
-                rootNode.AppendChild(XInterplayPathNode);
-
-                XmlNode XInterplayFileNameNode = xmlDoc.CreateElement("XInterplayFileName");
-                string titletemp = replaceSpecialSQLSyntax(xinfo.Title);
-                titletemp = titletemp.Replace(" ", "");
-                XInterplayFileNameNode.InnerText = titletemp;
-                rootNode.AppendChild(XInterplayFileNameNode);
-
-                XmlNode uniqueIdNode = xmlDoc.CreateElement("uniqueId");
-                uniqueIdNode.InnerText = xinfo.ProgramID;
-                rootNode.AppendChild(XInterplayFileNameNode);
-
-                XmlNode userIdNode = xmlDoc.CreateElement("userId");
-                userIdNode.InnerText = xinfo.Creator;
-                rootNode.AppendChild(userIdNode);
-
-                XmlNode userNameNode = xmlDoc.CreateElement("userName");
-                userNameNode.InnerText = xinfo.Author;
-                rootNode.AppendChild(userNameNode);
-
-                XmlNode platformNode = xmlDoc.CreateElement("platform");
-                platformNode.InnerText = xinfo.PlatForm;
-                rootNode.AppendChild(platformNode);
-
-                XmlNode siteNode = xmlDoc.CreateElement("site");
-                siteNode.InnerText = xinfo.Sites;
-                rootNode.AppendChild(siteNode);
-
-                XmlNode vbumendNode = xmlDoc.CreateElement("bumen");
-                vbumendNode.InnerText = xinfo.Vbumen;
-                rootNode.AppendChild(vbumendNode);
-
-
                 XmlNode filePathdNode = xmlDoc.CreateElement("filePath");
                 filePathdNode.InnerText = Properties.Settings.Default.destVideoPath;
                 rootNode.AppendChild(filePathdNode);
 
-
                 XmlNode fileNameNode = xmlDoc.CreateElement("fileName");
                 fileNameNode.InnerText = xinfo.Mediafilename;
                 rootNode.AppendChild(fileNameNode);
+
+                XmlNode newNameNode = xmlDoc.CreateElement("newName");
+                newNameNode.InnerText = xinfo.Title;
+                rootNode.AppendChild(newNameNode);
+
+                XmlNode srcXmlPathNode = xmlDoc.CreateElement("srcXmlPath");
+                srcXmlPathNode.InnerText = Properties.Settings.Default.destScriptPath;
+                rootNode.AppendChild(srcXmlPathNode);
+
+                XmlNode srcXmlNameNode = xmlDoc.CreateElement("srcXmlName");
+                srcXmlNameNode.InnerText = "1111.xml";
+                rootNode.AppendChild(srcXmlNameNode);
+
+                //Supplier
+                XmlNode SupplierNode = xmlDoc.CreateElement("Supplier");
+                SupplierNode.InnerText = Properties.Settings.Default.site;
+                rootNode.AppendChild(SupplierNode);
 
                 //附加根节点
                 xmlDoc.AppendChild(rootNode);
@@ -579,12 +556,12 @@ namespace xnewsInService
                 string destvideoinfoxml = Properties.Settings.Default.destVideoPath + "\\"+Path.GetFileName(xmlfile); 
                 File.Copy(xmlfile, destvideoinfoxml,true);
                 CommonTools.writeLog("复制 video info xmlfile 文件成功:" + destvideoinfoxml, logpath, "info");
-                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制 video info xmlfile 文件成功:" + Path.GetFileName(destvideoinfoxml)  + "\n");
+                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制 video info xmlfile 文件成功:" + destvideoinfoxml  + "\n");
                 return 0;
             }
             catch (Exception ee)
             {
-                CommonTools.writeLog("生成video info 异常:" + ee.ToString(), logpath, "error");
+                CommonTools.writeLog("生成video info xml 异常:" + ee.ToString(), logpath, "error");
                 return -1;
             }
         }
@@ -624,6 +601,8 @@ namespace xnewsInService
                 titletemp = titletemp.Replace(" ","");
 
                 XInterplayFileNameNode.InnerText = titletemp;
+                xinfo.Title = titletemp;
+            
                 rootNode.AppendChild(XInterplayFileNameNode);
 
                 XmlNode uniqueIdNode = xmlDoc.CreateElement("uniqueId");
@@ -763,15 +742,15 @@ namespace xnewsInService
                 string destscriptxml = Properties.Settings.Default.destScriptPath +"\\"+ xinfo.ProgramID + ".xml";
                 File.Copy(xmlfile, destscriptxml,true);
                 CommonTools.writeLog("复制文稿xml 文件成功:" + destscriptxml, logpath, "info");
-                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制文稿xml 文件成功:"  + Path.GetFileName(destscriptxml) + "\n");
+                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制文稿xml 文件成功:"  + destscriptxml + "\n");
                 
                 //复制视频文件
                 string destvideo = Properties.Settings.Default.destVideoPath + "\\" + Path.GetFileName(xinfo.MediafilePath);
                 CommonTools.writeLog("开始复制视频文件:" + destvideo, logpath, "info");
-                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "开始复制视频文件:" + Path.GetFileName(destvideo) + "\n");
+                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "开始复制视频文件:" + destvideo+ "\n");
                 File.Copy(xinfo.MediafilePath, destvideo,true);
                 CommonTools.writeLog("复制视频文件成功:" + destvideo, logpath, "info");
-                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制视频文件成功:" + Path.GetFileName(destvideo) + "\n");
+                SetText(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + "复制视频文件成功:" + destvideo + "\n");
                 //复制视频文件xml 
                 //生成导入的xml文件
                 int resultd =  createVideoInfo(xinfo);
